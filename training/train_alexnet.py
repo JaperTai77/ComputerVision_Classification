@@ -10,59 +10,45 @@ from utility.transform_data import transform_data
 from utility.neural_net_func import train
 from core.config import Settings
 
-class ModifiedLeNet(nn.Module):
+class AlexNet(nn.Module):
     def __init__(self, 
                  idx2class: dict, 
-                 flatten_in_features: int, 
-                 kernel: int=5, 
-                 cnn1_out_channel: int=6, 
-                 cnn2_out_channel: int=16):
-        super().__init__()
+                 flatten_in_features: int):
+        super(AlexNet, self).__init__()
         self.idx2class = idx2class
         self.in_feat = flatten_in_features
-        self.kernel = kernel
-        self.cnn1_out_channel = cnn1_out_channel
-        self.cnn2_out_channel = cnn2_out_channel
-        self.cn1 = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=self.cnn1_out_channel, kernel_size=kernel, stride=1),
+        self.feats = nn.Sequential(
+            nn.Conv2d(in_channels=3, out_channels=64, kernel_size=11, stride=4, padding=5),
             nn.ReLU(),
-            nn.MaxPool2d((2,2))
-        )
-        self.cn2 = nn.Sequential(
-            nn.Conv2d(in_channels=self.cnn1_out_channel, out_channels=self.cnn2_out_channel, kernel_size=kernel, stride=1),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(in_channels=64, out_channels=192, kernel_size=5, padding=2),
             nn.ReLU(),
-            nn.MaxPool2d((2,2))
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(in_channels=192, out_channels=384, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=384, out_channels=256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2,2),
         )
-        self.fc1 = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(self.in_feat, 120),
-            nn.ReLU()
-        )
-        self.fc2 = nn.Sequential(
-            nn.Linear(120, 84),
-            nn.ReLU()
-        )
-        self.fc3 = nn.Sequential(
-            nn.Linear(84, len(self.idx2class)),
-        )
-
-    def forward(self, x):
-        x = self.cn1(x)
-        x = self.cn2(x)
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.fc3(x)
-        return x
-    
+        self.clf = nn.Linear(in_features=self.in_feat, out_features=len(self.idx2class))
+    def forward(self, inp):
+        op = self.feats(inp)
+        op = op.view(op.size(0), -1)
+        op = self.clf(op)
+        return op
+ 
 def flatten_feature_calculation(
-        image_size:int=224, 
-        kernel: int=5, 
-        cnn2_out_channel: int=16) -> int:
+        image_size:int=224) -> int:
     def CNN_out(input_, kernel, padding, stride):
         return np.floor((input_-kernel+2*padding)/stride)+1
-    cn1_out = CNN_out(image_size, kernel, 0, 1)/2
-    cn2_out = CNN_out(cn1_out, kernel, 0, 1)/2
-    return cn2_out*cn2_out*cnn2_out_channel
+    cn1_out = CNN_out(image_size, 11, 5, 4)/2
+    cn2_out = CNN_out(cn1_out, 5, 2, 1)/2
+    cn3_out = CNN_out(cn2_out, 3, 1, 1)
+    cn4_out = CNN_out(cn3_out, 3, 1, 1)
+    cn5_out = CNN_out(cn4_out, 3, 1, 1)
+    return cn5_out*cn5_out*256
 
 def main(root_dir:str, 
          train_csv:str, 
@@ -81,13 +67,17 @@ def main(root_dir:str,
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True)
 
-    lenet = ModifiedLeNet(dataset.get_classes()[1], flatten_in_features=flatten_feature_calculation(image_size=image_size))
-    lenet.to(Settings.device)
+    alexnet = AlexNet(dataset.get_classes()[1], 
+                      flatten_in_features=flatten_feature_calculation(
+                          image_size=image_size
+                        )
+                    )
+    alexnet.to(Settings.device)
 
-    optimiser = optim.AdamW(lenet.parameters(), lr=0.001)
+    optimiser = optim.AdamW(alexnet.parameters(), lr=0.001)
     criterion = nn.CrossEntropyLoss()
     train_loss, train_accuracy, val_loss, val_accuracy = train(
-        model=lenet, trainloader=train_loader, valloader=val_loader, epochs=epochs, optimiser=optimiser, criterion=criterion
+        model=alexnet, trainloader=train_loader, valloader=val_loader, epochs=epochs, optimiser=optimiser, criterion=criterion
     )
     print("\n")
     print("===================================")
@@ -104,7 +94,7 @@ def main(root_dir:str,
     filename = filename if filename[-4:] == ".pth" else filename+".pth"
     full_path = os.path.join(Settings.root_dir, Settings.saved_model_path)
     full_path = os.path.join(full_path, filename)
-    torch.save(lenet.state_dict(), full_path)
+    torch.save(alexnet.state_dict(), full_path)
     print(f"Model weights saved to {full_path}")
 
 @click.command()
@@ -128,4 +118,3 @@ if __name__ == "__main__":
   #import warnings
   #warnings.filterwarnings("ignore")
   run()
-
