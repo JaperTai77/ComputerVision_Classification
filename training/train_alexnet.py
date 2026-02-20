@@ -61,7 +61,7 @@ def main(root_dir:str,
     dataset = CustomData(root_dir=root_dir, 
                          train_csv=train_csv, 
                          target_col_name=target, 
-                         transform=transform_data(augemntation=augmentation_bool)
+                         transform=transform_data(augmentation=augmentation_bool, image_size=image_size)
                          )
     train_dataset, val_dataset = random_split(dataset, [int(test_split*len(dataset)), len(dataset)-int(test_split*len(dataset))])
     train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)

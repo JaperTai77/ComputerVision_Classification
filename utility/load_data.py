@@ -20,16 +20,18 @@ class CustomData(Dataset):
         return len(self.annotations)
     
     def __getitem__(self, index):
-        img_path = os.path.join(self.root, self.annotations.loc[index, "image_path"])
+        img_path = os.path.join(self.root_dir, self.annotations.loc[index, "image_path"])
 
         img = Image.open(img_path).convert("RGB")
         label = self.annotations.loc[index, self.target]
-        label = torch.tensor(self.class2idx[label], dtype=torch.int8)
+        label = torch.tensor(self.class2idx[label], dtype=torch.long)
 
         if self.transform:
             img = self.transform(img)
         else:
             img = transforms.ToTensor()(img)
+
+        return img, label
 
     def get_classes(self) -> tuple[dict, dict]:
         """
